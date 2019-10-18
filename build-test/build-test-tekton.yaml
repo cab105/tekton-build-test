@@ -53,7 +53,7 @@ spec:
     params:
     - name: pathToDockerFile
       type: string
-      default: "/workspace/build-test/tekton-build-test/build-test/spring/Dockerfile"
+      default: "/workspace/tekton-build-test/build-test/spring/Dockerfile"
     - name: pathToContext
       type: string
       default: "/workspace/tekton-build-test/build-test/spring"
