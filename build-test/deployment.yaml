@@ -1,0 +1,37 @@
+---
+# Deployment manifest for registering and deploying the target service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tekton-build-test-deployment
+  labels:
+    app: tekton-build-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tekton-build-test
+  template:
+    metadata:
+      labels:
+        app: tekton-build-test
+    spec:
+      containers:
+      - name: tekton-build-test
+        image: builds.registry.svc.cluster.local/default/tekton-build-test
+        ports:
+        - containerPort: 8080
+---
+# Service manifest to expose our test service
+apiVersion: v1
+kind: Service
+metadata:
+  name: tekton-build-test
+  labels:
+    run: tekton-build-test
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+  selector:
+    run: tekton-build-test

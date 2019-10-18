@@ -1,0 +1,32 @@
+---
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  creationTimestamp: null
+  name: tekton-test
+spec:
+  steps:
+  - args:
+    - Hello
+    - world
+    - $(FOO)
+    command:
+    - echo
+    env:
+    - name: FOO
+      value: BAR
+    image: centos
+    name: first-action
+    resources: {}
+---
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  creationTimestamp: "2019-09-29T05:09:37Z"
+  name: tekton-test-pipeline
+spec:
+  tasks:
+  - name: tekton-test
+    taskRef:
+      name: tekton-test
+status: {}

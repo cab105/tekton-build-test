@@ -1,0 +1,15 @@
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineRun
+metadata:
+    name: build-test-pipeline-run
+spec:
+  pipelineRef:
+    name: tekton-build-test-pipeline
+  serviceAccount: 'default'
+  resources:
+  - name: sourcerepo
+    resourceRef:
+      name: srcrepo-git
+  - name: buildimage
+    resourceRef:
+      name: tekton-build-test-image

@@ -1,0 +1,160 @@
+---
+# This demo modifies the cluster (deploys to it) you must use a service
+# account with permission to admin the cluster (or make your default user an admin
+# of the `default` namespace with default-cluster-admin.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+ name: default-cluster-admin-tekton-build-test
+subjects:
+ - kind: ServiceAccount
+   name: default
+   namespace: default
+roleRef:
+ kind: ClusterRole
+ name: cluster-admin
+ apiGroup: rbac.authorization.k8s.io
+---
+# The location of the tekton-build-test repo to clone from
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: srcrepo-git
+spec:
+  type: git
+  params:
+    - name: revision
+      value: master
+    - name: url
+      value: https://github.com/cab105/tekton-build-test.git
+---
+# The location to push our resulting image to. This uses https://github.com/triggermesh/knative-local-registry
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: tekton-build-test-image
+spec:
+  type: image
+  params:
+    - name: url
+      value: builds.registry.svc.cluster.local/default/tekton-build-test
+---
+# This task performs the building of the jar file and docker image
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: build-and-push-tekton-build-test
+spec:
+  inputs:
+    resources:
+    - name: tekton-build-test
+      type: git
+    params:
+    - name: pathToDockerFile
+      type: string
+      default: "/workspace/build-test/tekton-build-test/build-test/spring/Dockerfile"
+    - name: pathToContext
+      type: string
+      default: "/workspace/tekton-build-test/build-test/spring"
+  outputs:
+    resources:
+    - name: builtImage
+      type: image
+  steps:
+  - name: build
+    image: maven
+    command:
+    - "mvn"
+    args:
+    - "clean"
+    - "install"
+    - "package"
+    workingDir: $(inputs.params.pathToContext)
+  - name: push
+    image: gcr.io/kaniko-project/executor
+    env:
+    - name: "DOCKER_CONFIG"
+      value: "/builder/home/.docker/"
+    command:
+    - "/kaniko/executor"
+    args:
+    - --dockerfile=$(inputs.params.pathToDockerFile)
+    - --destination=$(outputs.resources.builtImage.url)
+    - --context=$(inputs.params.pathToContext)
+---
+# Task to deploy the image from repo
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: deploy-tekton-build-test
+spec:
+  inputs:
+    resources:
+      - name: tekton-build-test
+        type: git
+      - name: targetImg
+        type: image
+    params:
+      - name: path
+        type: string
+        description: Path to the manifest to apply
+      - name: yamlPathToImage
+        type: string
+        description:
+          The path to the image to replace in the yaml manifest (arg to yq)
+        default: spec.template.spec.containers[0].image
+  steps:
+    - name: replace-image
+      image: mikefarah/yq
+      command: ["yq"]
+      args:
+        - "w"
+        - "-i"
+        - "$(inputs.params.path)"
+        - "$(inputs.params.yamlPathToImage)"
+        - "$(inputs.resources.targetImg.url)"
+    - name: run-kubectl
+      image: lachlanevenson/k8s-kubectl
+      command: ["kubectl"]
+      args:
+        - "apply"
+        - "-f"
+        - "$(inputs.params.path)"
+---
+# Pipeline to bind the build and deploy tasks together
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: tekton-build-test-pipeline
+spec:
+  resources:
+  - name: sourcerepo
+    type: git
+  - name: buildimage
+    type: image
+  tasks:
+  - name: build-the-tekton-build-test-image
+    resources:
+      inputs:
+      - name: tekton-build-test
+        resource: sourcerepo
+      outputs:
+      - name: builtImage
+        resource: buildimage
+    taskRef:
+      name: build-and-push-tekton-build-test
+  - name: tekton-deploy-build-test-image
+    taskRef:
+      name: deploy-tekton-build-test
+    runAfter:
+    - build-the-tekton-build-test-image
+    resources:
+      inputs:
+      - name: tekton-build-test
+        resource: sourcerepo
+      - name: targetImg
+        resource: buildimage
+    params:
+    - name: path
+      value: "/workspace/tekton-build-test/build-test/deployment.yaml"
