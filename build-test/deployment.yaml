@@ -30,8 +30,9 @@ metadata:
   labels:
     run: tekton-build-test
 spec:
+  type: NodePort
   ports:
   - port: 8080
-    protocol: TCP
+    protocol: HTTP
   selector:
     run: tekton-build-test
