@@ -33,6 +33,6 @@ spec:
   type: NodePort
   ports:
   - port: 8080
-    protocol: HTTP
+    protocol: TCP
   selector:
     run: tekton-build-test
